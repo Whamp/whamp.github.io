@@ -1,0 +1,29 @@
+.jumbotron {
+  padding: 5px;
+  margin-bottom: 5px;
+}
+
+.panel-body {
+	padding: 5px;
+}
+
+h4.stats {
+	margin-top: 0px;
+}
+
+.col-xs-4 {
+	padding-left: 5px;
+	padding-right: 0px;
+}
+
+#bean {
+	width: 75%;
+}
+
+h1 {
+  margin-top: 0px;
+}
+
+h3 {
+  margin-top: 0px;
+}

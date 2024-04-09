@@ -1,0 +1,95 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script type="text/javascript" src="jquery-2.2.4.min.js"></script>
+  <script type="text/javascript" src="bootstrap.min.js"></script>
+  <script type="text/javascript" src="moment.min.js"></script>
+  <script type="text/javascript" src="timer.js"></script>
+  <link rel="stylesheet" type="text/css" href="bootstrap.min.css">
+  <link rel="stylesheet" type="text/css" href="timer.css">
+  <title>Coffee Roasting Timer</title>
+</head>
+
+<body>
+  <div class="container">
+    <div>
+      <h3>
+        <a href="http://coffeeroastingtimer.github.io"><span class="label label-primary">Coffee Roasting Timer v2</span></a>
+      </h3>
+    </div>
+  
+    <div class="jumbotron">
+      <h1 id="timer">00:00</h1>
+      <p>
+        <a class="btn btn-md btn-primary" id="start-button">Start</a>
+        <a class="btn btn-md btn-success" id="first-crack-button">First Crack</a>
+        <a class="btn btn-md btn-primary" id="calc-button">Weight Loss</a>
+      </p>
+    </div>
+  
+    <div class="panel panel-primary">
+      <div class="panel-body">
+        <h4 class="stats">
+          <span class="label label-primary" id="first-crack">First Crack: </span>
+        </h4>
+        <h4>
+          <span class="label label-primary" id="development-time">Development: </span>
+        </h4>
+      </div>
+      <div class="container" id="development-times">
+        <div class="row">
+          <div class="col-xs-4">
+            <label id="lowest">15.0%: </label>
+          </div>
+          <div class="col-xs-4">
+            <label id="lower">17.5%: </label>
+          </div>
+          <div class="col-xs-4">
+            <label id="low">20.0%: </label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-xs-4">
+            <label id="mid">22.5%: </label>
+          </div>
+          <div class="col-xs-4">
+            <label id="high">25.0%: </label>
+          </div>
+          <div class="col-xs-4"></div>
+        </div>
+      </div>
+      <div class="panel-body" id="roast-attributes">
+        <form class="roast-attributes">
+          <fieldset>
+            <p>
+              <label for="input">Bean:</label>
+              <input type="text" id="bean" width="35" placeholder="Panama Gesha">
+            </p>
+            <p>
+              <label for="green-weight">Green Weight:</label>
+              <input type="number" id="green-weight" placeholder="226">
+            </p>
+            <p>
+              <label for="roast-weight">Roast Weight:</label>
+              <input type="number" id="roast-weight" placeholder="190">
+            </p>
+            <p>
+              <label id="weight-loss">Weight Loss: 0.00%</label>
+            </p>
+            <p>
+              <label id="date-timestamp">Date: </label>
+            </p>
+            <p>
+              <label for="notes">Notes:</label><br>
+              <textarea id="notes" name="notes" rows="4" cols="50"></textarea>
+            </p>
+          </fieldset>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
