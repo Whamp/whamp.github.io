@@ -1,27 +1,27 @@
 /** @type {import("pliny/config").PlinyConfig } */
 const siteMetadata = {
-  title: 'Next.js Starter Blog',
-  author: 'Tails Azimuth',
-  headerTitle: 'TailwindBlog',
-  description: 'A blog created with Next.js and Tailwind.css',
+  title: 'Will Hampson <-- Not a Bot',
+  author: 'Will',
+  headerTitle: 'Meandering Curiosity',
+  description: 'Meandering Curiosity',
   language: 'en-us',
   theme: 'system', // system, dark or light
-  siteUrl: 'https://tailwind-nextjs-starter-blog.vercel.app',
-  siteRepo: 'https://github.com/timlrx/tailwind-nextjs-starter-blog',
+  siteUrl: 'https://whamp.github.io',
+  siteRepo: 'https://github.com/Whamp/whamp.github.io',
   siteLogo: `${process.env.BASE_PATH || ''}/static/images/logo.png`,
   socialBanner: `${process.env.BASE_PATH || ''}/static/images/twitter-card.png`,
-  mastodon: 'https://mastodon.social/@mastodonuser',
-  email: 'address@yoursite.com',
-  github: 'https://github.com',
-  x: 'https://twitter.com/x',
-  // twitter: 'https://twitter.com/Twitter',
-  facebook: 'https://facebook.com',
-  youtube: 'https://youtube.com',
-  linkedin: 'https://www.linkedin.com',
-  threads: 'https://www.threads.net',
-  instagram: 'https://www.instagram.com',
-  medium: 'https://medium.com',
-  bluesky: 'https://bsky.app/',
+  mastodon: '',
+  email: '',
+  github: 'https://github.com/Whamp',
+  x: 'https://x.com/hampsonw',
+  // twitter: 'https://twitter.com/hampsonw',
+  facebook: '',
+  youtube: '',
+  linkedin: '',
+  threads: '',
+  instagram: '',
+  medium: '',
+  bluesky: '',
   locale: 'en-US',
   // set to true if you want a navbar fixed to the top
   stickyNav: false,
@@ -50,16 +50,10 @@ const siteMetadata = {
     // },
   },
   newsletter: {
-    // supports mailchimp, buttondown, convertkit, klaviyo, revue, emailoctopus, beehive
-    // Please add your .env file and modify it according to your selection
-    provider: 'buttondown',
+    provider: undefined,
   },
   comments: {
-    // If you want to use an analytics provider you have to add it to the
-    // content security policy in the `next.config.js` file.
-    // Select a provider and use the environment variables associated to it
-    // https://vercel.com/docs/environment-variables
-    provider: 'giscus', // supported providers: giscus, utterances, disqus
+    provider: undefined,
     giscusConfig: {
       // Visit the link below, and follow the steps in the 'configuration' section
       // https://giscus.app/
@@ -85,7 +79,7 @@ const siteMetadata = {
     },
   },
   search: {
-    provider: 'kbar', // kbar or algolia
+    provider: undefined,
     kbarConfig: {
       searchDocumentsPath: `${process.env.BASE_PATH || ''}/search.json`, // path to load documents to search
     },

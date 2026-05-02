@@ -1,0 +1,28 @@
+---
+title: Reasoning Budget Tradeoffs in Qwen-3.6-27B on LiveCodeBench
+date: '2026-05-02'
+tags: ['qwen', 'livecodebench', 'reasoning', 'benchmarks']
+draft: false
+summary: Initial notes from comparing Qwen-3.6-27B performance across different max reasoning token budgets on LiveCodeBench.
+authors: ['default']
+---
+
+This is an initial analysis, not a finished writeup.
+
+I’m comparing how Qwen-3.6-27B performs on LiveCodeBench as the maximum reasoning-token budget changes. The goal is to understand where extra reasoning budget helps, where it stops helping, and what tradeoffs show up in correctness, latency, and token use.
+
+[Open the interactive comparison](/static/diagrams/lcb-reasoning-budget-comparison.html)
+
+## Notes
+
+- Model: Qwen-3.6-27B
+- Benchmark: LiveCodeBench
+- Variable: maximum reasoning-token budget
+- Status: preliminary analysis
+
+## Next questions
+
+- Which reasoning budget gives the best accuracy-per-token tradeoff?
+- Where does performance flatten or regress?
+- Are failures caused by insufficient reasoning, incorrect reasoning, or execution/coding mistakes?
+- How stable are these results across problem difficulty and topic?
