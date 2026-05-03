@@ -57,7 +57,7 @@ What if I let Qwen reason freely, but put a hard cap on how long the reasoning b
 
 My vLLM server was already running a recently landed feature that applies a hard limit to Qwen's reasoning tokens, plus an optional string to smooth the hard stop. I had set a fairly large reasoning budget, around 32,000 tokens. That was a safety rail, not an optimized setting.
 
-The server also had a custom end string that vLLM injects when the reasoning budget runs out:
+My server also passes a custom end string that vLLM injects when the reasoning budget runs out:
 
 <div className="not-prose my-8 rounded-lg bg-gray-950 p-5 font-mono text-sm leading-7 text-gray-100">
   <code className="whitespace-pre-wrap break-words">{`{
@@ -67,9 +67,7 @@ The server also had a custom end string that vLLM injects when the reasoning bud
 }`}</code>
 </div>
 
-The important part is the injected sentence: "My reasoning budget is exhausted, but I have enough information to answer directly now."
-
-That sentence matters. It is the text the model sees at the cliff edge between hidden reasoning and the final answer.
+The important part is the injected sentence: "My reasoning budget is exhausted, but I have enough information to answer directly now." This is the text the model sees at the cliff edge between hidden reasoning and the final answer.
 
 That set the shape of the experiment:
 
@@ -80,7 +78,7 @@ That set the shape of the experiment:
 
 The benchmark slice was LiveCodeBench `release_v6`, LeetCode only, `contest_date >= 2025-01-01`, 50 tasks, public functional tests only.
 
-That setup makes the modes comparable to each other. It does not make these official private-test leaderboard scores.
+That setup makes the modes comparable to each other but it is obviously not an official leaderboard score.
 
 ## Small caps underperformed thinking off
 
@@ -134,7 +132,7 @@ The final run tested 4096, 8192, and 12288 reasoning-token caps on the same pinn
 | Budget 12288  | 44/50, 88% | 8,006             | 11,022            | 169s                 | 2                   |
 | Free thinking | 43/50, 86% | 18,080            | 18,464            | 289s                 | 7                   |
 
-The headline result is 8192.
+To me, the headline result is 8192.
 
 It matched free thinking at 43/50 while using about one-third of the reasoning tokens, less than half the total tokens, and less than half the wall-clock generation time.
 
@@ -152,7 +150,7 @@ Reasoning-token caps are useful, but generation time is closer to the real goal.
 
 *Source: my local benchmark logs and JSON summaries. Generation timing was added to the harness during the work, so the later runs record it directly.*
 
-The timing plot is why 8192 looks like the practical knee. It sits on the same accuracy line as free thinking, far to the left.
+The timing plot is why 8192 looks like the obvious winner to me. It sits on the same accuracy line as free thinking, but far to the left.
 
 12288 is still much cheaper than free thinking, but it moves meaningfully right for one extra public-test pass.
 
@@ -169,20 +167,6 @@ The cost picture is blunt:
 | Budget 12288 | +1                 | 44%                      | 60%                  | 59%                     |
 
 If I had to choose a setting from this run, I would use 8192 as the default and keep 12288 as a retry or quality mode.
-
-## The reasoning budget is a behavior knob, not just a cost knob
-
-The most interesting result was not a single pass rate.
-
-Across every mode I tried, the oracle score was 50/50. At least one mode solved every task.
-
-Across the budgeted modes from 256 through 12288, the oracle score was 49/50. Across only the three high-budget modes, 4096, 8192, and 12288, it was 47/50.
-
-The reasoning budget is not only a cost knob. It is a behavior knob.
-
-Some tasks got better with more thinking. Some got worse. Some were solved by thinking off or by a tiny budget and missed by larger budgets. Task `3717`, for example, was solved by `budget_256` and missed by almost everything else.
-
-That makes me wary of any policy that says "always use the biggest safe cap." A better production policy may be: start with 8192, then retry failures with a different cap or a different cutoff string.
 
 ## The cutoff string is an unexplored optimization surface
 
@@ -217,22 +201,15 @@ This was a useful experiment, not a final benchmark.
 
 First, these are public LiveCodeBench functional tests, not private official scores. They are good enough for comparing modes on the same pinned task list, but they are not leaderboard numbers.
 
-Second, I did not retune sampling. Qwen's recommended precise-coding settings use `temperature=0.6`, `top_p=0.95`, and `top_k=20`. The optimal cap may move under those settings.
+Second, I did not retune sampling. Qwen's recommended precise-coding settings use `temperature=0.6`, `top_p=0.95`, and `top_k=20`. The optimal cap may move under those settings. This experiment used `temperature=0.0` for repeatability across runs.
 
 Third, the low-budget run should be repeated with the corrected tokenizer and the same 65,536 completion cap used later.
 
 Fourth, 50 tasks is small. The shape of the curve is consistent enough to be useful, but the exact 8192-versus-12288 trade-off needs repeats.
 
-The [full interactive report](/static/diagrams/lcb-reasoning-budget-comparison.html) is still useful for inspecting the side-by-side metrics. I would not make it the only artifact, because the static charts above tell the story faster.
 
 ## The takeaway
 
-I came in trying to understand a surprising grammar-constrained reasoning claim. I left with a more useful measurement harness and a stronger result from explicit vLLM reasoning caps.
+It's possible to match the accuracy of unconstrained thinking with a hard reasoning budget limit. For this particular set of tasks, that limit was about 8000 tokens.
 
-For this model, on this LiveCodeBench slice, 32,000 reasoning tokens looks like a safety rail, not a needed default.
-
-8192 matched free thinking while cutting mean total tokens from 18,464 to 8,534 and mean generation time from 289 seconds to 131 seconds. 12288 found one more public-test pass, but cost more and did not dominate 8192 task by task.
-
-The next experiment is not "let it think more."
-
-It is: find the smallest cap that keeps quality, then optimize the sentence the model sees when that cap hits.
+There may be opportunities to refine or smooth this behavior further.
