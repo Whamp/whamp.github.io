@@ -1,28 +1,253 @@
 ---
-title: Reasoning Budget Tradeoffs in Qwen-3.6-27B on LiveCodeBench
-date: '2026-05-02'
+title: I capped Qwen's reasoning tokens. 8192 matched free thinking.
+date: '2026-05-02T12:00:00-07:00'
 tags: ['qwen', 'livecodebench', 'reasoning', 'benchmarks']
 draft: false
-summary: Initial notes from comparing Qwen-3.6-27B performance across different max reasoning token budgets on LiveCodeBench.
+summary: A LiveCodeBench experiment with Qwen3.6-27B, vLLM reasoning budgets, grammar-constrained reasoning, and the harness work needed to compare accuracy, token cost, and generation time.
 authors: ['default']
 ---
 
-This is an initial analysis, not a finished writeup.
+Qwen3.6-27B can be strong on coding, but it will happily spend 18,000 hidden reasoning tokens on one problem before it writes the answer.
 
-I’m comparing how Qwen-3.6-27B performs on LiveCodeBench as the maximum reasoning-token budget changes. The goal is to understand where extra reasoning budget helps, where it stops helping, and what tradeoffs show up in correctness, latency, and token use.
+On my pinned 50-task LiveCodeBench slice, an 8192-token vLLM reasoning cap matched free thinking at 86% pass@1 while cutting mean generation time from 289 seconds to 131 seconds.
 
-[Open the interactive comparison](/static/diagrams/lcb-reasoning-budget-comparison.html)
+That was not the experiment I originally set out to run.
 
-## Notes
+## The problem was already obvious: Qwen overthinks
 
-- Model: Qwen-3.6-27B
-- Benchmark: LiveCodeBench
-- Variable: maximum reasoning-token budget
-- Status: preliminary analysis
+I already knew the shape of the problem from running Qwen 3.5 and Qwen 3.6 models locally. They are good models, but the reasoning traces can get enormous.
 
-## Next questions
+That changes the practical meaning of "fast." Tokens per second is not the whole story. A model that emits tokens slowly can still answer faster if it needs far fewer tokens to get there.
 
-- Which reasoning budget gives the best accuracy-per-token tradeoff?
-- Where does performance flatten or regress?
-- Are failures caused by insufficient reasoning, incorrect reasoning, or execution/coding mistakes?
-- How stable are these results across problem difficulty and topic?
+![Kaitchup generated-token comparison for Gemma, Qwopus, and Qwen](/static/images/qwen-reasoning/kaitchup-generated-tokens-qwopus-qwen-gemma.jpeg)
+
+_Source: Benjamin Marie's [Kaitchup analysis of Qwopus vs. Qwen3.5](https://kaitchup.substack.com/p/qwopus-vs-qwen35-trading-accuracy), also reproduced on the [Jackrong/Qwopus3.5-27B-v3 model card](https://huggingface.co/Jackrong/Qwopus3.5-27B-v3). This chart is background motivation, not one of my benchmark results._
+
+That is why Qwopus caught my attention. [Qwopus3.5-27B-v3](https://huggingface.co/Jackrong/Qwopus3.5-27B-v3) is built on Qwen3.5-27B and post-trained toward a different reasoning style. Benjamin Marie's [analysis](https://kaitchup.substack.com/p/qwopus-vs-qwen35-trading-accuracy) framed it as a trade: a small accuracy cost in exchange for much shorter generations.
+
+![Kaitchup LiveCodeBench accuracy curve for Qwopus and Qwen](/static/images/qwen-reasoning/kaitchup-livecodebench-accuracy-budget.jpeg)
+
+_Source: Benjamin Marie's [Kaitchup article](https://kaitchup.substack.com/p/qwopus-vs-qwen35-trading-accuracy), via the [Qwopus model card](https://huggingface.co/Jackrong/Qwopus3.5-27B-v3). I am using it to explain the question that motivated my experiment, not as a baseline against my runs._
+
+Qwopus made the question feel plausible: could you keep most of Qwen's quality while making it reason less?
+
+But Qwopus uses training. I wanted to know how far I could get at inference time.
+
+## The trigger was grammar-constrained reasoning
+
+The thing that made me stop theorizing and actually run experiments was [Kaya Omer's Structured CoT post](https://andthattoo.dev/blog/structured_cot).
+
+The claim was surprising enough that I did not understand how it could work: constrain only the model's `<think>` block with a tiny grammar, leave the answer channel open, and get much shorter reasoning without losing accuracy.
+
+I cloned the repo because I wanted to understand the mechanism by touching it. The grammar path was not my only idea, but it was the immediate trigger.
+
+Kaya's post describes this as guided generation applied to the private scratchpad. The grammar makes the thinking block look like a compact plan instead of an unbounded monologue. Historically, output restrictions often hurt model performance, so the claim was worth checking rather than accepting.
+
+The repo I was working in already tested that grammar path. My question became slightly different:
+
+What if I let Qwen reason normally, but put a hard cap on how long the hidden reasoning block is allowed to run?
+
+## I already had the vLLM lever, I just had not measured it
+
+My vLLM server was already configured with Qwen's reasoning parser and a large reasoning budget, usually around 32,000 tokens. That was a safety rail, not an optimized setting.
+
+The server also had a custom end string that vLLM injects when the reasoning budget runs out:
+
+```json
+{
+  "reasoning_start_str": "<think>",
+  "reasoning_end_str": "My reasoning budget is exhausted, but I have enough information to answer directly now.</think>"
+}
+```
+
+That sentence matters. It is the text the model sees at the cliff edge between hidden reasoning and the final answer.
+
+So the experiment became:
+
+- grammar-constrained thinking versus free thinking
+- no thinking versus explicit reasoning caps
+- the same task list every time
+- not just accuracy, but hidden tokens, visible tokens, cap hits, extraction failures, and generation time
+
+The benchmark slice was LiveCodeBench `release_v6`, LeetCode only, `contest_date >= 2025-01-01`, 50 tasks, public functional tests only.
+
+That means these are useful apples-to-apples comparisons between modes. They are not official private-test leaderboard scores.
+
+## Tiny reasoning caps were too tiny
+
+I started with thinking off plus small caps: 256, 512, and 1024 reasoning tokens.
+
+| Mode         |     Pass@1 | Mean think tokens | Mean total tokens |
+| ------------ | ---------: | ----------------: | ----------------: |
+| Thinking off | 40/50, 80% |                 0 |             1,943 |
+| Budget 256   | 34/50, 68% |               251 |             2,135 |
+| Budget 512   | 36/50, 72% |               512 |             2,176 |
+| Budget 1024  | 39/50, 78% |             1,022 |             2,598 |
+
+That result was useful, mostly because it was not what I wanted.
+
+The tiny caps underperformed thinking off. But they also showed a clear trend: as I allowed more reasoning tokens, accuracy recovered.
+
+Thinking off also taught the first measurement lesson. Turning hidden reasoning off does not mean the model stops doing work. A lot of that work moves into the visible answer: comments, scaffolding, repeated explanation, or code-adjacent scratchpad.
+
+That same pattern showed up in the grammar-constrained runs. The `<think>` block got shorter, but the model sometimes compensated by pushing deliberation into comments or final-answer text.
+
+If you only count hidden reasoning tokens, you can fool yourself.
+
+## The harness had to become boring before the results mattered
+
+Long local benchmarks fail in boring ways. If the harness cannot recover, the data is not worth much.
+
+One task hit a transient `APIConnectionError`, so I added retries with 2, 4, and 8 second backoff.
+
+Then I made a worse mistake: I started a 4096/8192 run with `--max-tokens 12288`, thinking that was a final-answer limit. It was not. vLLM's `max_tokens` limits the whole completion, including thinking. If the model spends 8192 tokens reasoning, a 12288 completion cap leaves only about 4096 tokens for code.
+
+That can cut the model off in the middle of the answer.
+
+So I patched the harness:
+
+- write `results.jsonl` after each completed task
+- save the exact task IDs and order
+- add `--resume`
+- skip already-completed task rows
+- record per-mode failure metadata
+- record per-mode generation timing
+- record the budget end marker label and hash for future cutoff-string experiments
+
+That changed the workflow from "hope this six-hour command survives" to "stop, resume, and keep the task list comparable."
+
+One caveat: the first low-budget pass used the wrong local tokenizer ID for token counting, `Qwen/Qwen3.6-35B-A3B` instead of the closer `Qwen/Qwen3.6-27B`. vLLM enforced the budgets server-side, so pass/fail did not change, but the token counts from that early pass are less trustworthy than the later runs.
+
+## Free thinking set the target, but it was expensive
+
+After pinning the task IDs, I ran free thinking, the grammar mode, and a 2048-token cap with a much larger `--max-tokens 65536`.
+
+| Mode          |     Pass@1 | Mean think tokens | Mean total tokens | Mean generation time |
+| ------------- | ---------: | ----------------: | ----------------: | -------------------: |
+| Free thinking | 43/50, 86% |            18,080 |            18,464 |                 289s |
+| Grammar FSM   | 34/50, 68% |               158 |             5,026 |                  78s |
+| Budget 2048   | 40/50, 80% |             1,957 |             7,011 |                 110s |
+
+Free thinking was the quality target, but it hit the 65,536-token completion cap seven times. Five of those cap hits failed because the model never produced extractable code.
+
+The grammar result was instructive, but not in the way I hoped. It crushed hidden reasoning tokens, down to 158 on average, but only passed 34/50. It also averaged almost 4,900 post-think tokens, which is exactly the answer-channel compensation problem.
+
+The 2048 cap was more promising: still below free thinking, but close enough to justify pushing higher.
+
+## The curve started bending around 8192
+
+The final run tested 4096, 8192, and 12288 reasoning-token caps on the same pinned 50 tasks, with `--max-tokens 65536`.
+
+![Our LiveCodeBench accuracy curve by explicit reasoning-token cap](/static/images/qwen-reasoning/our-accuracy-vs-reasoning-budget.png)
+
+_Source: my local run against `cyankiwi/Qwen3.6-27B-AWQ-BF16-INT4` served through vLLM. Dataset slice: LiveCodeBench `release_v6`, LeetCode, `contest_date >= 2025-01-01`, 50 public-test tasks._
+
+| Mode          |     Pass@1 | Mean think tokens | Mean total tokens | Mean generation time | Completion cap hits |
+| ------------- | ---------: | ----------------: | ----------------: | -------------------: | ------------------: |
+| Budget 4096   | 41/50, 82% |             3,537 |             7,430 |                 115s |                   2 |
+| Budget 8192   | 43/50, 86% |             6,046 |             8,534 |                 131s |                   1 |
+| Budget 12288  | 44/50, 88% |             8,006 |            11,022 |                 169s |                   2 |
+| Free thinking | 43/50, 86% |            18,080 |            18,464 |                 289s |                   7 |
+
+The headline result is 8192.
+
+It matched free thinking at 43/50 while using about one-third of the reasoning tokens, less than half the total tokens, and less than half the wall-clock generation time.
+
+12288 scored one task higher. I would call that the current quality ceiling, not a proven better default. On 50 tasks, one task is two percentage points, and the improvement was not monotonic at the task level.
+
+Compared with 8192, the 12288 cap gained tasks `3688`, `3714`, `3789`, and `3793`, but lost `3562`, `3674`, and `3781`.
+
+More reasoning changed the path. It did not simply preserve every lower-budget success and add more.
+
+## Time made the trade-off clearer than tokens alone
+
+Reasoning-token caps are useful, but generation time is closer to the real goal. I do not care about fewer hidden tokens in isolation. I care about getting the best answer I can in less time.
+
+![Accuracy versus mean generation time for grammar, capped, and free-thinking runs](/static/images/qwen-reasoning/our-accuracy-vs-generation-time.png)
+
+_Source: my local benchmark logs and JSON summaries. Generation timing was added to the harness during the work, so the later runs record it directly._
+
+The timing plot is why 8192 looks like the practical knee. It sits on the same accuracy line as free thinking, far to the left.
+
+12288 is still much cheaper than free thinking, but it moves meaningfully right for only one extra public-test pass.
+
+![Cost relative to free thinking for the high reasoning caps](/static/images/qwen-reasoning/our-cost-relative-to-free.png)
+
+_Source: same pinned benchmark runs. Percentages compare each cap's mean reasoning tokens, total tokens, and generation time against free thinking._
+
+The cost picture is blunt:
+
+| Mode         | Pass delta vs free | Reasoning tokens vs free | Total tokens vs free | Generation time vs free |
+| ------------ | -----------------: | -----------------------: | -------------------: | ----------------------: |
+| Budget 4096  |                 -2 |                      20% |                  40% |                     40% |
+| Budget 8192  |                  0 |                      33% |                  46% |                     45% |
+| Budget 12288 |                 +1 |                      44% |                  60% |                     59% |
+
+If I had to choose a setting from this run, I would use 8192 as the default and keep 12288 as a retry or quality mode.
+
+## The oracle result says the budget changes behavior
+
+The most interesting result was not a single pass rate.
+
+Across every mode I tried, the oracle was 50/50. At least one mode solved every task.
+
+Across only budgeted modes from 256 through 12288, the oracle was 49/50. Across just the three high-budget modes, 4096, 8192, and 12288, the oracle was 47/50.
+
+That means the reasoning budget is not only a cost knob. It is a behavior knob.
+
+Some tasks got better with more thinking. Some got worse. Some were solved by thinking off or by a tiny budget and missed by larger budgets. Task `3717`, for example, was solved by `budget_256` and missed by almost everything else.
+
+That makes me wary of any policy that says "always use the biggest safe cap." A better production policy may be: start with 8192, then retry failures with a different cap or a different cutoff string.
+
+## The cutoff string is the next thing to optimize
+
+The current end string is:
+
+```text
+My reasoning budget is exhausted, but I have enough information to answer directly now.
+```
+
+It works, but I have no reason to believe it is optimal.
+
+When vLLM injects that phrase, the model has to recover from an interrupted reasoning trace and produce final code. A better phrase might make that transition cleaner. A worse phrase might cause apology text, answer-channel reasoning, bloated comments, or incomplete code.
+
+This is where I want to try GEPA or a similar optimizer. The search target is not the user prompt. It is the server-side `reasoning_end_str`.
+
+The evaluator should reward:
+
+- pass rate at lower caps, especially 4096 and 8192
+- fewer total tokens
+- lower generation time
+- fewer completion cap hits
+- fewer extraction failures
+- less comment bloat and answer-channel reasoning
+
+The awkward part is operational. `reasoning_end_str` is a vLLM server config, not a normal per-request parameter. Testing many candidates probably means restarting vLLM per candidate, or serving several variants in parallel.
+
+Still, this is the obvious next lever. If a better cutoff phrase makes 4096 behave more like 8192, the payoff is large.
+
+## What I would rerun before making stronger claims
+
+This was a useful experiment, not a final benchmark.
+
+First, these are public LiveCodeBench functional tests, not private official scores. They are good enough for comparing modes against each other on the same pinned task list, but they are not leaderboard numbers.
+
+Second, I did not retune sampling. Qwen's recommended precise-coding settings use `temperature=0.6`, `top_p=0.95`, and `top_k=20`. The optimal cap may move under those settings.
+
+Third, the low-budget run should be repeated with the corrected tokenizer and the same 65,536 completion cap used later.
+
+Fourth, 50 tasks is small. The shape of the curve is consistent enough to be useful, but the exact 8192-versus-12288 trade-off needs repeats.
+
+The [full interactive report](/static/diagrams/lcb-reasoning-budget-comparison.html) is still useful for inspecting the side-by-side metrics. I just would not make it the only artifact, because the static charts above tell the story faster.
+
+## My current take
+
+I came in trying to understand a surprising grammar-constrained reasoning claim. I left with a more useful measurement harness and a stronger result from explicit vLLM reasoning caps.
+
+For this model, on this LiveCodeBench slice, 32,000 reasoning tokens looks like a safety rail, not a needed default.
+
+8192 matched free thinking while cutting mean total tokens from 18,464 to 8,534 and mean generation time from 289 seconds to 131 seconds. 12288 found one more public-test pass, but cost more and did not dominate 8192 task by task.
+
+The next experiment is not "let it think more."
+
+It is: find the smallest cap that keeps quality, then optimize the sentence the model sees when that cap hits.
