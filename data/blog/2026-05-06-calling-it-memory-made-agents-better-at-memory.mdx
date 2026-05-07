@@ -17,6 +17,18 @@ authors:
   - default
 ---
 
+## What Napkin is
+
+Napkin is a local-first, file-based knowledge system for AI agents. It stores notes as markdown in an Obsidian-compatible vault and gives agents a CLI and SDK to search, read, and write them.
+
+The design principle is progressive disclosure: instead of dumping the full vault into context, the agent starts with a short overview (~200 tokens), then searches, then reads specific files. This keeps token usage low while still giving the agent access to everything.
+
+On LongMemEval — a long-term memory benchmark from ICLR 2025 — Napkin with a frontier model already matches or beats the best published systems (91.0% on the S split, vs 86% prior best). It does this with zero preprocessing: no embeddings, no graph database, no fact extraction pipeline. Just BM25 search on markdown files.
+
+That's the baseline. The question for this post is whether a surface rename could push it further.
+
+---
+
 Napkin scored 87.6% accuracy on the full LongMemEval_S split with 89.0% session recall, running a local Qwen3.6 model.
 
 But I wondered whether the name was working against the model. "Napkin" is a fine project name, but it doesn't describe what the agent is doing. The agent is using memory.
