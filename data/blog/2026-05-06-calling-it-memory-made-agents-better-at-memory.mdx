@@ -1,0 +1,436 @@
+---
+title: 'Calling it memory made agents better at memory'
+date: '2026-05-06'
+tags:
+  - agents
+  - memory
+  - longmemeval
+  - benchmarks
+  - napkin
+lastmod: '2026-05-06'
+draft: false
+summary: >-
+  Napkin was already strong on LongMemEval_S. Renaming the model-facing surface
+  from napkin to memory improved one Qwen3.6 run from 87.6% to 90.6% accuracy,
+  with the biggest gains on multi-session and temporal reasoning.
+authors:
+  - default
+---
+
+Napkin scored 87.6% accuracy on the full LongMemEval_S split with 89.0% session recall, running a local Qwen3.6 model.
+
+But I wondered whether the name was working against the model. "Napkin" is a fine project name, but it doesn't describe what the agent is doing. The agent is using memory.
+
+I ran a test:
+
+> If every model-visible surface says **memory** instead of **napkin**, does the agent perform better on a memory benchmark?
+
+Same model, seed, dataset, and concurrency. The answer was yes.
+
+<div className="not-prose my-8 grid gap-4 md:grid-cols-4">
+  <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950">
+    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Accuracy</div>
+    <div className="mt-2 text-4xl font-bold text-emerald-600 dark:text-emerald-400">90.6%</div>
+    <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">memory, up from 87.6%</div>
+  </div>
+  <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950">
+    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Session recall</div>
+    <div className="mt-2 text-4xl font-bold text-sky-600 dark:text-sky-400">91.5%</div>
+    <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">memory, up from 89.0%</div>
+  </div>
+  <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950">
+    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Accuracy delta</div>
+    <div className="mt-2 text-4xl font-bold text-violet-600 dark:text-violet-400">+3.0</div>
+    <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+      points on 500 questions
+    </div>
+  </div>
+  <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950">
+    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Errors</div>
+    <div className="mt-2 text-4xl font-bold text-amber-600 dark:text-amber-400">0</div>
+    <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">in both runs (500 / 500)</div>
+  </div>
+</div>
+
+This isn't a rename announcement. It's an interface experiment.
+
+The largest gains came from multi-session reasoning, temporal reasoning, and knowledge updates — the parts that most look like memory.
+
+## What LongMemEval_S tests
+
+LongMemEval is a long-term chat assistant memory benchmark. The S split gives each question a sizeable history, roughly dozens of sessions and around 115k tokens of conversation. The agent has to retrieve the right pieces and answer questions about old user interactions.
+
+The benchmark covers five abilities:
+
+| Ability                 | What it is testing                                             |
+| ----------------------- | -------------------------------------------------------------- |
+| Information extraction  | Can the agent find a specific fact from prior conversation?    |
+| Multi-session reasoning | Can it combine evidence spread across sessions?                |
+| Knowledge updates       | Can it use the most recent value when older memories conflict? |
+| Temporal reasoning      | Can it reason about dates and relative time?                   |
+| Abstention              | Can it say the answer is not in memory instead of guessing?    |
+
+A memory system can look good on simple retrieval and still fail in practice. Users don't ask "find note 2023-11-30/round-6." They ask "how many postcards have I added since I started collecting again?"
+
+That needs search, reading, temporal context, and sometimes arithmetic. The model has to treat the archive as memory, not a folder of markdown files.
+
+## The baseline was already strong
+
+The baseline was the existing Napkin surface:
+
+```bash
+npx tsx bench/longmemeval-eval.ts \
+  --dataset s \
+  --n 500 \
+  --concurrency 2 \
+  --seed 42 \
+  --json \
+  --model "cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit:xhigh"
+```
+
+That run finished with:
+
+| Surface | Evaluated | Accuracy | 95% CI         | Session recall | 95% CI         |
+| ------- | --------: | -------: | -------------- | -------------: | -------------- |
+| napkin  | 500 / 500 |    87.6% | 84.7% to 90.5% |          89.0% | 86.6% to 91.3% |
+
+That's already strong for a local agentic memory system — no embeddings, no graph database, no fact extraction pipeline. The benchmark creates markdown notes, injects an overview, and lets the agent use search and read tools.
+
+The question was whether the interface name was making the model work against a confusing metaphor.
+
+## The memory variant changed names, not retrieval
+
+For the variant, I changed the model-visible surface to memory:
+
+<div className="not-prose my-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
+  <div className="mb-5 text-sm font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+    Surface rename
+  </div>
+  <div className="grid gap-4 md:grid-cols-2">
+    <div className="rounded-xl bg-gray-50 p-4 dark:bg-gray-900">
+      <div className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">
+        Baseline surface
+      </div>
+      <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+        <li>
+          <code>.napkin</code>
+        </li>
+        <li>
+          <code>NAPKIN.md</code>
+        </li>
+        <li>
+          <code>napkin vault</code>
+        </li>
+        <li>
+          <code>napkin search</code> / <code>napkin read</code>
+        </li>
+        <li>
+          <code>kb_search</code> / <code>kb_read</code>
+        </li>
+      </ul>
+    </div>
+    <div className="rounded-xl bg-emerald-50 p-4 dark:bg-emerald-950/40">
+      <div className="mb-3 text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+        Memory surface
+      </div>
+      <ul className="space-y-2 text-sm text-emerald-900 dark:text-emerald-100">
+        <li>
+          <code>.memory</code>
+        </li>
+        <li>
+          <code>MEMORY.md</code>
+        </li>
+        <li>
+          <code>memory vault</code>
+        </li>
+        <li>
+          <code>memory search</code> / <code>memory read</code>
+        </li>
+        <li>
+          <code>memory_search</code> / <code>memory_read</code>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+The underlying retrieval stayed the same — same BM25, note splitting, dataset, model, and seed. The memory extension still calls the same Napkin library methods for overview, search, and read. For compatibility, the benchmark creates the model-facing `.memory` directory and keeps a `.napkin` symlink for the unchanged library path.
+
+I changed what the agent sees.
+
+The memory run used:
+
+```bash
+npx tsx bench/longmemeval-eval.ts \
+  --dataset s \
+  --n 500 \
+  --concurrency 2 \
+  --seed 42 \
+  --surface memory \
+  --json \
+  --model "cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit:xhigh"
+```
+
+## The memory surface scored 90.6%
+
+The memory run finished with:
+
+| Surface | Evaluated | Accuracy | 95% CI         | Session recall | 95% CI         |
+| ------- | --------: | -------: | -------------- | -------------: | -------------- |
+| napkin  | 500 / 500 |    87.6% | 84.7% to 90.5% |          89.0% | 86.6% to 91.3% |
+| memory  | 500 / 500 |    90.6% | 88.0% to 93.2% |          91.5% | 89.3% to 93.5% |
+
+<div className="not-prose my-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
+  <div className="mb-5 text-sm font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+    Accuracy and recall
+  </div>
+  <div className="space-y-5">
+    <div className="grid grid-cols-[5rem_1fr_4rem] items-center gap-3">
+      <div className="text-sm font-medium text-gray-700 dark:text-gray-300">napkin</div>
+      <div className="h-5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+        <div className="h-full rounded-full bg-gray-500" style={{ width: '87.6%' }} />
+      </div>
+      <div className="text-right text-sm font-semibold text-gray-700 dark:text-gray-300">87.6%</div>
+    </div>
+    <div className="grid grid-cols-[5rem_1fr_4rem] items-center gap-3">
+      <div className="text-sm font-medium text-emerald-700 dark:text-emerald-300">memory</div>
+      <div className="h-5 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950">
+        <div className="h-full rounded-full bg-emerald-500" style={{ width: '90.6%' }} />
+      </div>
+      <div className="text-right text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+        90.6%
+      </div>
+    </div>
+    <div className="mt-6 grid grid-cols-[5rem_1fr_4rem] items-center gap-3">
+      <div className="text-sm font-medium text-gray-700 dark:text-gray-300">napkin</div>
+      <div className="h-5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+        <div className="h-full rounded-full bg-sky-400" style={{ width: '89.0%' }} />
+      </div>
+      <div className="text-right text-sm font-semibold text-gray-700 dark:text-gray-300">89.0%</div>
+    </div>
+    <div className="grid grid-cols-[5rem_1fr_4rem] items-center gap-3">
+      <div className="text-sm font-medium text-sky-700 dark:text-sky-300">memory</div>
+      <div className="h-5 overflow-hidden rounded-full bg-sky-100 dark:bg-sky-950">
+        <div className="h-full rounded-full bg-sky-500" style={{ width: '91.5%' }} />
+      </div>
+      <div className="text-right text-sm font-semibold text-sky-700 dark:text-sky-300">91.5%</div>
+    </div>
+  </div>
+  <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+    Top pair: answer accuracy. Bottom pair: session recall.
+  </div>
+</div>
+
+Memory gained 3.0 accuracy points and 2.5 recall points.
+
+| Metric            | Napkin | Memory |   Delta |
+| ----------------- | -----: | -----: | ------: |
+| Accuracy          |  87.6% |  90.6% |   +3.0  |
+| Session recall    |  89.0% |  91.5% |   +2.5  |
+| Session F1        |  0.337 |  0.287 |  -0.049 |
+
+Session F1 dropped, though. Memory found the answer more often but wasn't more precise about which sessions it pulled evidence from. It retrieves more useful context, not a tighter evidence set.
+
+Retrieval metrics aren't the product metric. Users care whether the answer is right. But engineers should still watch evidence quality — broad retrieval can hide fragility.
+
+## The gains showed up where semantics should matter
+
+The strongest evidence for the hypothesis is the ability breakdown.
+
+| Ability                 | Napkin accuracy | Memory accuracy |       Delta |
+| ----------------------- | --------------: | --------------: | ----------: |
+| Information extraction  |           94.7% |           93.3% | -1.3 points |
+| Multi-session reasoning |           79.3% |           87.6% | +8.3 points |
+| Knowledge updates       |           94.4% |           97.2% | +2.8 points |
+| Temporal reasoning      |           89.0% |           92.9% | +3.9 points |
+| Abstention              |           63.3% |           63.3% | +0.0 points |
+
+<div className="not-prose my-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
+  <div className="mb-5 text-sm font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+    Accuracy delta by ability
+  </div>
+  <div className="space-y-4">
+    <div className="grid grid-cols-[11rem_1fr_4rem] items-center gap-3">
+      <div className="text-sm text-gray-700 dark:text-gray-300">information extraction</div>
+      <div className="h-4 overflow-hidden rounded-full bg-red-100 dark:bg-red-950">
+        <div className="h-full rounded-full bg-red-500" style={{ width: '16%' }} />
+      </div>
+      <div className="text-right text-sm font-semibold text-red-600 dark:text-red-400">-1.3</div>
+    </div>
+    <div className="grid grid-cols-[11rem_1fr_4rem] items-center gap-3">
+      <div className="text-sm text-gray-700 dark:text-gray-300">multi-session</div>
+      <div className="h-4 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950">
+        <div className="h-full rounded-full bg-emerald-500" style={{ width: '100%' }} />
+      </div>
+      <div className="text-right text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+        +8.3
+      </div>
+    </div>
+    <div className="grid grid-cols-[11rem_1fr_4rem] items-center gap-3">
+      <div className="text-sm text-gray-700 dark:text-gray-300">knowledge updates</div>
+      <div className="h-4 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950">
+        <div className="h-full rounded-full bg-emerald-500" style={{ width: '34%' }} />
+      </div>
+      <div className="text-right text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+        +2.8
+      </div>
+    </div>
+    <div className="grid grid-cols-[11rem_1fr_4rem] items-center gap-3">
+      <div className="text-sm text-gray-700 dark:text-gray-300">temporal reasoning</div>
+      <div className="h-4 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950">
+        <div className="h-full rounded-full bg-emerald-500" style={{ width: '47%' }} />
+      </div>
+      <div className="text-right text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+        +3.9
+      </div>
+    </div>
+    <div className="grid grid-cols-[11rem_1fr_4rem] items-center gap-3">
+      <div className="text-sm text-gray-700 dark:text-gray-300">abstention</div>
+      <div className="h-4 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950">
+        <div className="h-full rounded-full bg-gray-300 dark:bg-gray-600" style={{ width: '2%' }} />
+      </div>
+      <div className="text-right text-sm font-semibold text-gray-500 dark:text-gray-400">
+        +0.0
+      </div>
+    </div>
+  </div>
+  <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+    Bar lengths are scaled to the largest absolute delta, 8.3 points.
+  </div>
+</div>
+
+Information extraction dipped slightly. When the task is just "find the fact," the interface name probably doesn't matter.
+
+The big gains were multi-session and temporal reasoning — where the model has to treat the corpus as personal history, not a pile of documents.
+
+The matched-question flips tell the same story:
+
+<div className="not-prose my-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
+  <div className="mb-5 text-sm font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+    Question-level flips on 500 questions
+  </div>
+  <div className="grid gap-4 md:grid-cols-3">
+    <div className="rounded-xl bg-emerald-50 p-5 dark:bg-emerald-950/40">
+      <div className="text-4xl font-bold text-emerald-600 dark:text-emerald-300">35</div>
+      <div className="mt-1 text-sm text-emerald-900 dark:text-emerald-100">
+        questions memory got right that napkin missed
+      </div>
+    </div>
+    <div className="rounded-xl bg-red-50 p-5 dark:bg-red-950/40">
+      <div className="text-4xl font-bold text-red-600 dark:text-red-300">20</div>
+      <div className="mt-1 text-sm text-red-900 dark:text-red-100">
+        questions memory missed that napkin got right
+      </div>
+    </div>
+    <div className="rounded-xl bg-violet-50 p-5 dark:bg-violet-950/40">
+      <div className="text-4xl font-bold text-violet-600 dark:text-violet-300">+15</div>
+      <div className="mt-1 text-sm text-violet-900 dark:text-violet-100">
+        net correct-question gain
+      </div>
+    </div>
+  </div>
+</div>
+
+The 35 memory wins were concentrated in multi-session reasoning:
+
+| Ability                 | Memory better | Memory worse | Net |
+| ----------------------- | ------------: | -----------: | --: |
+| Multi-session reasoning |            14 |            4 | +10 |
+| Temporal reasoning      |             7 |            2 |  +5 |
+| Knowledge updates       |             3 |            1 |  +2 |
+| Abstention              |             6 |            6 |  +0 |
+| Information extraction  |             5 |            7 |  -2 |
+
+About as clean as you can get from a single noisy benchmark run.
+
+## Why a name can change behavior
+
+LLMs aren't API clients. They bring a lot of associations into every decision, not just function signatures.
+
+"Napkin" works as a product name, but inside the model's action loop it's abstract. A human learns that Napkin means memory. The model gets a short prompt, a tool list, some snippets, and a few turns. If the interface says "napkin vault," the model has to figure out what that means.
+
+"Memory" does not require that translation.
+
+This shows up in small ways:
+
+- the model may search with different terms
+- it may decide to read more context before answering
+- it may treat conflicts as memory updates instead of document contradictions
+- it may be more willing to answer from prior user history
+- it may be more careful with temporal references
+
+No magic keyword makes an agent smart. But naming is part of the prompt. Tool names are part of the prompt. File paths are part of the prompt. If the agent reads it, it steers.
+
+Same reason `memory_search` is a better tool name than `kb_search` for a memory benchmark. `kb_search` is generic. `memory_search` tells the model what the tool is for.
+
+## What changed operationally
+
+The memory variant changed these model-visible surfaces:
+
+| Surface           | Baseline                      | Memory variant                 |
+| ----------------- | ----------------------------- | ------------------------------ |
+| Vault directory   | `.napkin`                     | `.memory`                      |
+| Overview file     | `NAPKIN.md`                   | `MEMORY.md`                    |
+| Prompt wording    | `napkin vault`                | `memory vault`                 |
+| Bash instruction  | `napkin search/read`          | `memory search/read`           |
+| Tool names        | `kb_search`, `kb_read`        | `memory_search`, `memory_read` |
+| Tool descriptions | knowledge base / napkin vault | memory / memory note           |
+
+The search and read implementation stayed the same. The memory extension still uses the same Napkin library. The benchmark kept the same question sample with `--seed 42`.
+
+This was a surface rename for the model, not a product rename.
+
+## The caveats are real
+
+This is one model:
+
+```text
+cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit:xhigh
+```
+
+Different models may respond differently. Frontier models may infer the metaphor easily. Smaller models may benefit more from literal names. Tool-trained models may be especially sensitive to function names.
+
+The judge isn't independent either. LongMemEval uses the same model for the agent and the judge, so read the absolute accuracy as "accuracy under this judge," not ground truth.
+
+For this A/B, the same judge scored both surfaces, so the relative comparison holds. Before making stronger claims, I'd rejudge both logs with a separate model.
+
+Both runs completed all 500 questions with zero errors, so the accuracy comparison is clean — no confound from different sample sizes.
+
+Latency is noisy. The memory run used less total agent time (5592s vs 7342s across questions), but local model server conditions vary. I wouldn't claim the speedup until it reproduces.
+
+The accuracy gain is the signal worth tracking.
+
+## What I would test next
+
+First: rejudge with a stronger independent model. The logs already have the question, gold answer, and agent answer, so the expensive agent part doesn't need to rerun.
+
+Second, run the same A/B across more models:
+
+| Model family                      | What I expect                                     |
+| --------------------------------- | ------------------------------------------------- |
+| Strong frontier models            | Smaller gain, because they can infer the metaphor |
+| Local Qwen-style reasoning models | Similar or larger gain                            |
+| Smaller local models              | Potentially larger gain, but more variance        |
+| Tool-trained models               | Larger sensitivity to tool names and descriptions |
+
+Third: isolate the pieces. The memory variant changed the whole surface at once, which was right for a first test. Next experiments should split it apart:
+
+1. prompt wording only
+2. tool descriptions only
+3. tool names only
+4. `.memory` and `MEMORY.md` path only
+5. full memory surface
+
+That would tell us whether the gain came from the word "memory" in the system prompt, the tool names, the path, or the combined consistency.
+
+## The practical lesson
+
+Interface names are prompts.
+
+A tool called `search_archive` and a tool called `memory_search` may call the same function, but they mean different things to the model. The model is always interpreting the interface.
+
+Napkin is still a good product name — short, unusual, memorable. But inside the agent loop, the word "memory" is a better steering surface, at least for this model on LongMemEval_S.
+
+Memory systems should look like memory to the model.
+
+Keep the project name. I'm keeping mine. But when the agent reads the tool list, the vault path, and the instructions — call the thing what it is.
