@@ -57,6 +57,37 @@ The difficulty split matched the original shape.
 
 I expected a better workflow to recover the gap. It did not.
 
+## Are the failure modes the same?
+
+Not exactly.
+
+I do not have the full transcripts for Kun's original TDD arm, so this is based on the per-task scores and the submitted tarballs: what code was written, whether tests were kept, and where the two TDD arms diverged.
+
+The common root failure is clear enough: both TDD variants often turned the agent's own tests into a narrow local definition of done. The hidden grader still cared about behavior those tests did not discover.
+
+The overlap was large:
+
+| comparison vs control | tasks won | tasks lost | tied |
+| --- | ---: | ---: | ---: |
+| original TDD | 53 | 136 | 3 |
+| my TDD skill | 67 | 124 | 1 |
+
+Both TDD arms lost to control on **106 of the same tasks**. Their per-task deltas against control were moderately correlated, about **r = 0.48**. That is enough overlap to make the shared failure mode more plausible than "one bad prompt." Both also spent much more process on the task: original TDD used 67 turns per task, my skill used 69, and the control used 40.
+
+But the shape of the failure changed.
+
+The original TDD skill looked more vulnerable to bulk self-specification: bigger local test suites that encoded the agent's guessed behavior, often paired with thinner implementations. On `simeg__eureka`, for example, control scored **67.4**, original TDD scored **38.4**, and my TDD arm scored **41.9**. The original TDD submission kept a large behavior test file and a smaller implementation than control. My skill did slightly better, but still missed enough hidden behavior to lose badly.
+
+My skill shifted the agent toward public-interface, vertical-slice tests. That helped on some tasks. On `eradman__entr`, original TDD scored **42.7** while my TDD skill scored **69.0**, close to control's **72.4**. On `hairyhenderson__gomplate`, original TDD scored **30.9** while my skill scored **64.1**, slightly above control's **59.6**.
+
+But the same discipline also produced a scarier failure: good-looking behavior tests that were still incomplete. On `bootandy__dust`, my arm kept reasonable tests for help/version output, apparent sizes, JSON output, filters, and files-from behavior. The result still scored **2.4** against control's **63.9** and original TDD's **59.2**. On `bellard__quickjs`, original TDD and control both landed around **60**, while my arm collapsed to **2.1** after choosing a Python mini-JavaScript interpreter architecture.
+
+So my read is:
+
+> The original skill more often failed by writing a guessed local spec in bulk. My skill produced cleaner behavior slices and fixed some of those failures. But both shared the deeper ProgramBench failure mode: self-written tests are an unreliable proxy for hidden requirements, and the extra TDD process competes with exploration and implementation.
+
+That is the part that changed my mind. I had assumed a better TDD prompt would fix the result. Instead, it mostly changed which tasks failed.
+
 ## What changed my mind
 
 My prior was simple: old skill, old workflow, newer model. Better TDD should help.
