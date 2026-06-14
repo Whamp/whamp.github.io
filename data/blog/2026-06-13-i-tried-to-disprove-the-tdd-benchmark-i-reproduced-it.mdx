@@ -17,25 +17,21 @@ authors:
   - default
 ---
 
-I saw [Kun Chen's X thread](https://x.com/kunchenguid/status/2064196342248030352) and wanted it to be wrong.
+Kun Chen published a [ProgramBench result](https://x.com/kunchenguid/status/2064196342248030352) arguing that a TDD skill hurt GPT-5.5 in Codex. I expected the result to depend on the specific skill he tested.
 
-The hook was blunt: **"DO NOT ASK YOUR AGENTS TO DO TDD."** Kun had run [ProgramBench](https://github.com/facebookresearch/programbench) with GPT-5.5 in Codex, once with a free-choice control and once with the [Superpowers TDD skill](https://github.com/obra/superpowers/blob/main/skills/test-driven-development/SKILL.md). The chart said TDD made agents worse and more expensive at every task difficulty.
+His setup was simple: same benchmark, same model, same Codex defaults. The control arm used no mandated workflow. The TDD arm added the [Superpowers test-driven-development skill](https://github.com/obra/superpowers/blob/main/skills/test-driven-development/SKILL.md). Kun reported lower test pass-rate and higher cost for the TDD arm across easy, medium, and hard tasks.
 
 ![Kun Chen's TDD benchmark chart from X](/static/images/tdd-reproduction/root-image.png)
 
-The thread added the important details: same model, same benchmark, same setup except for the TDD skill. Kun used test pass-rate by task difficulty rather than solve@95 because solve@95 was nearly always zero. His proposed failure mode was that agents write weak tests, watch them pass, and stop early.
+I use a different TDD prompt. It emphasizes behavior through public interfaces, one red-green-refactor cycle at a time, and vertical slices rather than writing a large test suite up front. I thought that difference might explain the original result.
 
-I thought the obvious problem was the skill.
+I reran the comparison with that skill.
 
-The TDD workflow I use is stricter about behavior. Tests should hit public interfaces, not implementation details. The loop should move vertically: one failing behavior test, one small implementation, refactor, repeat. No bulk test-writing. No testing imagined APIs before the agent understands the task.
+It did not change the conclusion.
 
-I had a Codex subscription expiring, so I spent it on the experiment I expected to falsify the post: rerun the same benchmark with my TDD skill.
+## Result
 
-It did not falsify it.
-
-## The result
-
-I used the same n = 192 denominator as Kun's write-up: the structurally broken and unscoreable tasks stay blocklisted. The alternate TDD arm finished all 192 non-blocklisted tasks, and I refreshed stale evals before scoring.
+I used the same n = 192 denominator as Kun's write-up. The structurally broken and unscoreable tasks stayed blocklisted. The alternate TDD arm completed all 192 non-blocklisted tasks, and I refreshed stale evals before scoring.
 
 | arm | mean % | solve@75 | solve@60 | $ / task | turns |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -43,11 +39,11 @@ I used the same n = 192 denominator as Kun's write-up: the structurally broken a
 | original TDD | 48.8 | 9.9 | 32.8 | $1.73 | 67.0 |
 | my TDD skill | 47.8 | 8.3 | 33.3 | $1.81 | 69.3 |
 
-Against the no-TDD control, my TDD skill lost by **4.6 mean pass-rate points**. It won 67 tasks, lost 124, and tied 1. The paired Wilcoxon p-value was **1.2e-6**.
+My TDD skill lost to the no-TDD control by **4.6 mean pass-rate points**. It won 67 tasks, lost 124, and tied 1. The paired Wilcoxon p-value was **1.2e-6**.
 
-Against the original TDD arm, it was basically tied: **−1.0 mean points**, 93 wins, 95 losses, 4 ties, p = **0.74**.
+Against the original TDD arm, it was effectively tied: **-1.0 mean points**, 93 wins, 95 losses, 4 ties, p = **0.74**.
 
-The difficulty split matched the original shape.
+The difficulty split matched the original pattern.
 
 | difficulty | control % | original TDD % | my TDD % |
 | --- | ---: | ---: | ---: |
@@ -55,50 +51,38 @@ The difficulty split matched the original shape.
 | medium | 56.9 | 53.4 | 52.8 |
 | hard | 27.9 | 25.9 | 25.2 |
 
-I expected a better workflow to recover the gap. It did not.
+## Failure modes
 
-## Are the failure modes the same?
+I do not have full transcripts for Kun's original TDD arm, so this section uses the available artifacts: per-task scores and submitted tarballs. That limits what I can claim about the agents' internal process.
 
-Not exactly.
-
-I do not have the full transcripts for Kun's original TDD arm, so this is based on the per-task scores and the submitted tarballs: what code was written, whether tests were kept, and where the two TDD arms diverged.
-
-The common root failure is clear enough: both TDD variants often turned the agent's own tests into a narrow local definition of done. The hidden grader still cared about behavior those tests did not discover.
-
-The overlap was large:
+The two TDD arms failed in similar places. Original TDD lost to control on 136 tasks. My TDD skill lost on 124. Both lost on **106 of the same tasks**. Their per-task deltas against control had a moderate correlation of about **r = 0.48**.
 
 | comparison vs control | tasks won | tasks lost | tied |
 | --- | ---: | ---: | ---: |
 | original TDD | 53 | 136 | 3 |
 | my TDD skill | 67 | 124 | 1 |
 
-Both TDD arms lost to control on **106 of the same tasks**. Their per-task deltas against control were moderately correlated, about **r = 0.48**. That is enough overlap to make the shared failure mode more plausible than "one bad prompt." Both also spent much more process on the task: original TDD used 67 turns per task, my skill used 69, and the control used 40.
+The shared failure mode appears to be this: the agent's own tests became a narrower definition of done than the hidden grader used. TDD increased the amount of work spent on local tests, but those tests did not reliably discover the hidden behavior ProgramBench scores.
 
-But the shape of the failure changed.
+The two skills did not fail identically.
 
-The original TDD skill looked more vulnerable to bulk self-specification: bigger local test suites that encoded the agent's guessed behavior, often paired with thinner implementations. On `simeg__eureka`, for example, control scored **67.4**, original TDD scored **38.4**, and my TDD arm scored **41.9**. The original TDD submission kept a large behavior test file and a smaller implementation than control. My skill did slightly better, but still missed enough hidden behavior to lose badly.
+The original TDD arm looked more prone to writing a larger guessed local spec. On `simeg__eureka`, control scored **67.4**, original TDD scored **38.4**, and my TDD arm scored **41.9**. The original TDD submission kept a large behavior test file and a smaller implementation than control. My version did slightly better, but still missed enough hidden behavior to lose badly.
 
-My skill shifted the agent toward public-interface, vertical-slice tests. That helped on some tasks. On `eradman__entr`, original TDD scored **42.7** while my TDD skill scored **69.0**, close to control's **72.4**. On `hairyhenderson__gomplate`, original TDD scored **30.9** while my skill scored **64.1**, slightly above control's **59.6**.
+My skill did help on some tasks. On `eradman__entr`, original TDD scored **42.7** while my TDD skill scored **69.0**, close to control's **72.4**. On `hairyhenderson__gomplate`, original TDD scored **30.9** while my skill scored **64.1**, slightly above control's **59.6**.
 
-But the same discipline also produced a scarier failure: good-looking behavior tests that were still incomplete. On `bootandy__dust`, my arm kept reasonable tests for help/version output, apparent sizes, JSON output, filters, and files-from behavior. The result still scored **2.4** against control's **63.9** and original TDD's **59.2**. On `bellard__quickjs`, original TDD and control both landed around **60**, while my arm collapsed to **2.1** after choosing a Python mini-JavaScript interpreter architecture.
+It also produced a different kind of bad result. On `bootandy__dust`, my arm kept reasonable public-interface tests for help/version output, apparent sizes, JSON output, filters, and files-from behavior. The final score was still **2.4**, compared with **63.9** for control and **59.2** for original TDD. On `bellard__quickjs`, control and original TDD both scored about **60**, while my arm scored **2.1** after choosing a Python mini-JavaScript interpreter architecture.
 
-So my read is:
+My interpretation: the original skill more often failed by writing a guessed local spec in bulk. My skill produced cleaner behavior slices and fixed some of those failures. But both shared the deeper ProgramBench problem: self-written tests are an unreliable proxy for hidden requirements, and the extra TDD loop competes with exploration and implementation time.
 
-> The original skill more often failed by writing a guessed local spec in bulk. My skill produced cleaner behavior slices and fixed some of those failures. But both shared the deeper ProgramBench failure mode: self-written tests are an unreliable proxy for hidden requirements, and the extra TDD process competes with exploration and implementation.
+## What I take from this
 
-That is the part that changed my mind. I had assumed a better TDD prompt would fix the result. Instead, it mostly changed which tasks failed.
+My prior was that a better TDD prompt would recover the gap. It did not.
 
-## What changed my mind
+ProgramBench is not a normal maintenance task. The agent is not changing a known codebase with an agreed specification. It is reconstructing CLI behavior from a reference binary, docs, and probes, then facing a hidden grader. The hard part is discovering behavior the agent does not yet know.
 
-My prior was simple: old skill, old workflow, newer model. Better TDD should help.
+A behavior-first TDD skill can improve the tests the agent writes. It cannot make those tests cover behavior the agent has not discovered.
 
-ProgramBench punishes that assumption. The agent is not maintaining a known codebase with a real spec. It is reverse-engineering a CLI from a binary, docs, and probes, then facing a hidden grader. The hard part is discovering behavior the agent does not yet know.
-
-A behavior-first TDD skill improves the tests the agent writes. It does not make those tests cover hidden behavior.
-
-That makes Kun's failure mode more plausible to me now. The problem is not just bad tests. It is that self-written tests become a stopping signal. The agent can create a local definition of done that is narrower than the benchmark's definition of done.
-
-TDD still buys something in normal software work: regression safety, refactoring confidence, executable specs, and better design pressure. But ProgramBench removes much of that context. It asks for a one-shot clone against a hidden test suite. In that setting, test-first process looked like overhead plus premature confidence.
+That makes Kun's proposed failure mode plausible to me. The problem is not only that agents write weak tests. The problem is that passing self-written tests can become a stopping signal. The agent can satisfy its local spec while still missing the benchmark's spec.
 
 ## What this does not prove
 
@@ -108,10 +92,6 @@ It does not prove agents should never write tests.
 
 It does not prove TDD hurts every model, benchmark, task, or codebase.
 
-It does show that I failed to disprove Kun's result with the stronger TDD variant I expected to win. On this benchmark, with this model and this hidden-spec setup, the no-TDD control still won.
+It does show that I failed to disprove Kun's result with the stronger TDD variant I expected to help. On this benchmark, with this model and this hidden-spec setup, the no-TDD control still won.
 
-I sent the reproduction data back upstream as [a PR](https://github.com/kunchenguid/programbench-bench/pull/1): per-task rows, submissions, a difficulty breakdown chart, and a short reproduction note.
-
-My update is boring but useful: I was surprised, checked the denominator, refreshed the stale evals, and still got the same answer.
-
-That is the kind of result I trust more than my priors.
+I sent the reproduction data upstream as [a PR](https://github.com/kunchenguid/programbench-bench/pull/1): per-task rows, submissions, a difficulty breakdown chart, and a short reproduction note.
