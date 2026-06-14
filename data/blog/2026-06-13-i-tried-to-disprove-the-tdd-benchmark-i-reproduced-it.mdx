@@ -23,7 +23,7 @@ His setup was simple: same benchmark, same model, same Codex defaults. The contr
 
 ![Kun Chen's TDD benchmark chart from X](/static/images/tdd-reproduction/root-image.png)
 
-I use a different TDD prompt. It emphasizes behavior through public interfaces, one red-green-refactor cycle at a time, and vertical slices rather than writing a large test suite up front. I thought that difference might explain the original result.
+I tested a different TDD prompt: Matt Pocock's version, with four small edits to remove instructions that ask the human for confirmation, since an automated harness cannot answer. The prompt emphasizes behavior through public interfaces, one red-green-refactor cycle at a time, and vertical slices rather than writing a large test suite up front. I thought that difference might explain the original result.
 
 I reran the comparison with that skill.
 
