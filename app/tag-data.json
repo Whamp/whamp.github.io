@@ -1,6 +1,13 @@
 {
+  "agents": 2,
+  "memory": 1,
+  "longmemeval": 1,
+  "benchmarks": 3,
+  "napkin": 1,
+  "tdd": 1,
+  "codex": 1,
+  "programbench": 1,
   "qwen": 1,
   "livecodebench": 1,
-  "reasoning": 1,
-  "benchmarks": 1
+  "reasoning": 1
 }
